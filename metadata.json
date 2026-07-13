@@ -1,0 +1,6 @@
+{
+  "name": "Atmos Search",
+  "description": "A smart generative search engine that organizes search results into a clean, minimalist UI with personalized onboarding and dynamic context controls.",
+  "requestFramePermissions": ["microphone", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
