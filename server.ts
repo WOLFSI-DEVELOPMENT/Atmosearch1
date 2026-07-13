@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
@@ -8,6 +7,10 @@ import cors from "cors";
 
 import crypto from "crypto";
 import OpenAI from "openai";
+
+import { getDb } from "./src/db/index.js";
+import { users, searchHistory, developerPlugins } from "./src/db/schema.js";
+import { eq, desc } from "drizzle-orm";
 
 dotenv.config();
 
@@ -29,9 +32,6 @@ app.post("/api/auth/signup", async (req, res) => {
       const { email, password } = req.body;
       if (!email || !password) return res.status(400).json({ error: "Email and password required" });
       
-      const { getDb } = await import("./src/db/index.js");
-      const { users } = await import("./src/db/schema.js");
-      const { eq } = await import("drizzle-orm");
       const db = getDb();
 
       // Check if user exists
@@ -57,9 +57,6 @@ app.post("/api/auth/signup", async (req, res) => {
       const { email, password } = req.body;
       if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
-      const { getDb } = await import("./src/db/index.js");
-      const { users } = await import("./src/db/schema.js");
-      const { eq } = await import("drizzle-orm");
       const db = getDb();
 
       const user = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -127,9 +124,6 @@ app.post("/api/auth/signup", async (req, res) => {
       });
       const googleUser = await userRes.json();
 
-      const { getDb } = await import("./src/db/index.js");
-      const { users } = await import("./src/db/schema.js");
-      const { eq } = await import("drizzle-orm");
       const db = getDb();
 
       // Find or create user
@@ -220,9 +214,6 @@ app.post("/api/auth/signup", async (req, res) => {
         email = emails.find((e: any) => e.primary)?.email || emails[0]?.email;
       }
 
-      const { getDb } = await import("./src/db/index.js");
-      const { users } = await import("./src/db/schema.js");
-      const { eq } = await import("drizzle-orm");
       const db = getDb();
 
       const existingUsers = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -380,7 +371,7 @@ app.post("/api/auth/signup", async (req, res) => {
       
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.1-flash-lite",
         contents: `Fix the following transcribed speech for a search query. Make it grammatically correct and clear, but do not change the core meaning. Only return the corrected text, nothing else.\n\nSpeech: "${text}"`,
       });
       
@@ -614,7 +605,7 @@ app.post("/api/auth/signup", async (req, res) => {
             };
             
             const intentRes = await ai.models.generateContent({
-              model: "gemini-3.5-flash",
+              model: "gemini-3.1-flash-lite",
               contents: `Analyze the user's query and extract if it's searching for real-world places/venues, the search term, and any explicitly mentioned location.\n\nQuery: "${query}"`,
               config: {
                 responseMimeType: "application/json",
@@ -810,7 +801,7 @@ app.post("/api/auth/signup", async (req, res) => {
 
       const prompt = `User Query: ${query}${userContext}\n\n${searchContext}`;
 
-      const modelUsed = "gemini-1.5-flash";
+      const modelUsed = "gemini-3.1-flash-lite";
       const response = await ai.models.generateContent({
         model: modelUsed,
         contents: prompt,
@@ -842,8 +833,6 @@ app.post("/api/auth/signup", async (req, res) => {
       let historyId = null;
       try {
         if (process.env.DATABASE_URL) {
-          const { getDb } = await import("./src/db/index.js");
-          const { searchHistory } = await import("./src/db/schema.js");
           const db = getDb();
           
           // Try to get userId from headers or just save anonymously
@@ -884,9 +873,6 @@ app.post("/api/auth/signup", async (req, res) => {
 
       if (!process.env.DATABASE_URL) return res.json({ success: true, warning: "DB not configured" });
 
-      const { getDb } = await import("./src/db/index.js");
-      const { searchHistory } = await import("./src/db/schema.js");
-      const { eq } = await import("drizzle-orm");
       const db = getDb();
 
       await db.update(searchHistory)
@@ -1124,9 +1110,6 @@ app.post("/api/auth/signup", async (req, res) => {
   app.get("/api/user/:id", async (req, res) => {
     try {
       if (!process.env.DATABASE_URL) return res.status(500).json({ error: "DB not configured" });
-      const { getDb } = await import("./src/db/index.js");
-      const { users } = await import("./src/db/schema.js");
-      const { eq } = await import("drizzle-orm");
       const db = getDb();
       const user = await db.select().from(users).where(eq(users.id, req.params.id)).limit(1);
       if (user.length === 0) return res.status(404).json({ error: "User not found" });
@@ -1139,9 +1122,6 @@ app.post("/api/auth/signup", async (req, res) => {
   app.post("/api/user", async (req, res) => {
     try {
       if (!process.env.DATABASE_URL) return res.status(500).json({ error: "DB not configured" });
-      const { getDb } = await import("./src/db/index.js");
-      const { users } = await import("./src/db/schema.js");
-      const { eq } = await import("drizzle-orm");
       const db = getDb();
       const { id, ...data } = req.body;
 
@@ -1160,9 +1140,6 @@ app.post("/api/auth/signup", async (req, res) => {
   app.get("/api/search-history/:userId", async (req, res) => {
     try {
       if (!process.env.DATABASE_URL) return res.status(500).json({ error: "DB not configured" });
-      const { getDb } = await import("./src/db/index.js");
-      const { searchHistory } = await import("./src/db/schema.js");
-      const { eq, desc } = await import("drizzle-orm");
       const db = getDb();
       const history = await db.select().from(searchHistory)
         .where(eq(searchHistory.userId, req.params.userId))
@@ -1177,8 +1154,6 @@ app.post("/api/auth/signup", async (req, res) => {
   app.post("/api/search-history", async (req, res) => {
     try {
       if (!process.env.DATABASE_URL) return res.status(500).json({ error: "DB not configured" });
-      const { getDb } = await import("./src/db/index.js");
-      const { searchHistory } = await import("./src/db/schema.js");
       const db = getDb();
       const { userId, query } = req.body;
       const created = await db.insert(searchHistory).values({ userId, query }).returning();
@@ -1194,8 +1169,6 @@ app.post("/api/auth/signup", async (req, res) => {
       if (!process.env.DATABASE_URL) {
         return res.json({ plugins: fallbackPlugins, warning: "DATABASE_URL not configured. Using local mock state." });
       }
-      const { getDb } = await import("./src/db/index.js");
-      const { developerPlugins } = await import("./src/db/schema.js");
       const db = getDb();
       const pluginsList = await db.select().from(developerPlugins);
       res.json({ plugins: pluginsList });
@@ -1230,8 +1203,6 @@ app.post("/api/auth/signup", async (req, res) => {
         return res.json({ plugin: newPlugin, warning: "DATABASE_URL not configured. Using local mock state." });
       }
 
-      const { getDb } = await import("./src/db/index.js");
-      const { developerPlugins } = await import("./src/db/schema.js");
       const db = getDb();
       
       const newPlugin = await db.insert(developerPlugins).values({
@@ -1256,6 +1227,7 @@ async function startServer() {
   const PORT = 3000;
 
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
