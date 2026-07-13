@@ -36,5 +36,8 @@ export const searchHistory = pgTable("search_history", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").references(() => users.id),
   query: text("query").notNull(),
+  response: jsonb("response"),
+  modelUsed: varchar("model_used", { length: 100 }),
+  feedback: varchar("feedback", { length: 20 }), // 'like', 'dislike', null
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

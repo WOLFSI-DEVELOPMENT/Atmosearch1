@@ -7,10 +7,16 @@ import bcrypt from "bcryptjs";
 import cors from "cors";
 
 import crypto from "crypto";
+import OpenAI from "openai";
 
 dotenv.config();
 
 const pkceStates = new Map<string, string>();
+
+const nvidiaClient = new OpenAI({
+  apiKey: process.env.NVIDIA_API_KEY || "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",
+  baseURL: "https://integrate.api.nvidia.com/v1",
+});
 
 export const app = express();
 
@@ -71,10 +77,15 @@ app.post("/api/auth/signup", async (req, res) => {
 
   // Google OAuth Routes
   app.get("/api/auth/google/url", (req, res) => {
-    const redirectUri = `${process.env.APP_URL || 'https://' + req.get('host')}/api/auth/google/callback`;
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      return res.status(500).json({ error: "GOOGLE_CLIENT_ID not configured" });
+    }
+    const redirectUri = `${process.env.APP_URL || 'https://' + req.get('host')}/api/auth/google/url`; // Wait, should it be callback?
+    // Let me check the callback route
+    const actualRedirectUri = `${process.env.APP_URL || 'https://' + req.get('host')}/api/auth/google/callback`;
     const params = new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      redirect_uri: redirectUri,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      redirect_uri: actualRedirectUri,
       response_type: "code",
       scope: "openid email profile",
       access_type: "offline",
@@ -799,8 +810,9 @@ app.post("/api/auth/signup", async (req, res) => {
 
       const prompt = `User Query: ${query}${userContext}\n\n${searchContext}`;
 
+      const modelUsed = "gemini-1.5-flash";
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: modelUsed,
         contents: prompt,
         config: {
           systemInstruction: systemInstruction,
@@ -808,27 +820,83 @@ app.post("/api/auth/signup", async (req, res) => {
           responseSchema: responseSchema,
         },
       });
-
       const text = response.text;
+
       let data;
       try {
-        data = JSON.parse(text || "{}");
+        const rawData = JSON.parse(text || "{}");
+        // Ensure required fields exist to prevent client-side crashes
+        data = {
+          summary: rawData.summary || "No summary provided.",
+          keyFindings: Array.isArray(rawData.keyFindings) ? rawData.keyFindings : [],
+          sections: Array.isArray(rawData.sections) ? rawData.sections : [],
+          relatedQueries: Array.isArray(rawData.relatedQueries) ? rawData.relatedQueries : [],
+          showImages: !!rawData.showImages
+        };
       } catch (err) {
-        console.error("Failed to parse JSON from Gemini response:", text);
+        console.error(`Failed to parse JSON from ${modelUsed} response:`, text);
         return res.status(500).json({ error: "Failed to parse structured response from AI." });
+      }
+
+      // Save to search history if DB is configured
+      let historyId = null;
+      try {
+        if (process.env.DATABASE_URL) {
+          const { getDb } = await import("./src/db/index.js");
+          const { searchHistory } = await import("./src/db/schema.js");
+          const db = getDb();
+          
+          // Try to get userId from headers or just save anonymously
+          const userId = req.headers['x-user-id'] || req.body.userId;
+          
+          const saved = await db.insert(searchHistory).values({
+            userId: userId as string || null,
+            query: query,
+            response: data,
+            modelUsed: modelUsed,
+          }).returning();
+          historyId = saved[0].id;
+        }
+      } catch (err) {
+        console.error("Failed to save search history:", err);
       }
 
       const isPlacesResult = searchContext.includes("Local Places (Foursquare)");
 
       res.json({
+        id: historyId,
         result: data,
         sources: sources,
         images: (data.showImages || (isPlacesResult && images.length > 0)) ? images : [],
+        modelUsed: modelUsed,
       });
 
     } catch (error: any) {
       console.error("Error generating search response:", error);
       res.status(500).json({ error: error.message || "An error occurred during the search." });
+    }
+  });
+
+  app.post("/api/feedback", async (req, res) => {
+    try {
+      const { id, feedback } = req.body;
+      if (!id || !feedback) return res.status(400).json({ error: "Missing id or feedback" });
+
+      if (!process.env.DATABASE_URL) return res.json({ success: true, warning: "DB not configured" });
+
+      const { getDb } = await import("./src/db/index.js");
+      const { searchHistory } = await import("./src/db/schema.js");
+      const { eq } = await import("drizzle-orm");
+      const db = getDb();
+
+      await db.update(searchHistory)
+        .set({ feedback })
+        .where(eq(searchHistory.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Feedback error:", error);
+      res.status(500).json({ error: "Failed to save feedback" });
     }
   });
 

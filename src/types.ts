@@ -16,9 +16,11 @@ export interface SearchResult {
 }
 
 export interface SearchResponse {
+  id: string | null;
   result: SearchResult;
   sources: SearchSource[];
   images?: string[];
+  modelUsed?: string;
 }
 
 export interface MCPPlugin {

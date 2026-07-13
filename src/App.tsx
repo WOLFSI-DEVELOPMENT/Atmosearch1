@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, Loader2, Sparkles, FileText, CornerDownLeft, Plus, Mic, ArrowUp, Edit, PanelLeftClose, X, Check, Brain, Calendar, StickyNote, ImageIcon, MapPin, Grid, ChevronRight, MoreHorizontal, MessageSquare, Trash2, Paperclip, Github, ArrowRight, User, Mail } from 'lucide-react';
+import { Search, Loader2, Sparkles, FileText, CornerDownLeft, Plus, Mic, ArrowUp, Edit, PanelLeftClose, X, Check, Brain, Calendar, StickyNote, ImageIcon, MapPin, Grid, ChevronRight, MoreHorizontal, MessageSquare, Trash2, Paperclip, Github, ArrowRight, User, Mail, ThumbsUp, ThumbsDown } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'motion/react';
@@ -1679,7 +1679,7 @@ function SearchResults({ addSearch }: { addSearch: (q: string) => void }) {
                 <SourcesList sources={item.response.sources} images={item.response.images} />
 
                 <div className="space-y-2">
-                  {item.response.result.sections.map((section, idx) => (
+                  {item.response.result.sections?.map((section, idx) => (
                     <ResultBlock 
                       key={idx} 
                       title={section.title} 
@@ -1690,11 +1690,52 @@ function SearchResults({ addSearch }: { addSearch: (q: string) => void }) {
                   ))}
                 </div>
 
+                <div className="mt-6 flex items-center justify-between py-4 border-t border-gray-50">
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={async () => {
+                        if (!item.response?.id) return;
+                        try {
+                          await fetch('/api/feedback', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: item.response.id, feedback: 'like' })
+                          });
+                          // Optionally update local state to show it was liked
+                        } catch (e) {}
+                      }}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all flex items-center gap-2 group"
+                    >
+                      <ThumbsUp className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!item.response?.id) return;
+                        try {
+                          await fetch('/api/feedback', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: item.response.id, feedback: 'dislike' })
+                          });
+                        } catch (e) {}
+                      }}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all flex items-center gap-2 group"
+                    >
+                      <ThumbsDown className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    </button>
+                  </div>
+                  {item.response.modelUsed && (
+                    <span className="text-[11px] font-mono text-gray-300 uppercase tracking-widest">
+                      Response by {item.response.modelUsed}
+                    </span>
+                  )}
+                </div>
+
                 {item.response.result.relatedQueries && item.response.result.relatedQueries.length > 0 && (
                   <div className="mt-12 pt-8 border-t border-gray-100">
                     <h3 className="text-sm font-medium text-gray-500 mb-4 uppercase tracking-wider">Related</h3>
                     <div className="flex flex-col gap-2">
-                      {item.response.result.relatedQueries.map((q, idx) => (
+                      {item.response.result.relatedQueries?.map((q, idx) => (
                         <button
                           key={idx}
                           onClick={() => navigate(`/search?q=${encodeURIComponent(q)}`)}
